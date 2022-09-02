@@ -1,0 +1,15 @@
+02_kfreebsd_support.diff
+03_ldap3_by_default.diff
+04_remove_gdbm_support.diff
+05_debian_defaults.diff
+05_debian_manpage_differences.diff
+05_debian_readme_differences.diff
+06_debian_paths.diff
+07_sasl_config.diff
+10_openssl_version_check.diff
+40_chroot_by_default.diff
+41_rmail.diff
+50_LANG.diff
+70_postfix-check.diff
+71_debianize_collate.diff
+debian-man-name.diff

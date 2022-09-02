@@ -1,0 +1,5 @@
+--- a/man/man8/lmtp.8
++++ b/man/man8/lmtp.8
+@@ -1 +1 @@
+-.so man8/smtp.8
++.so man8/smtp.8postfix

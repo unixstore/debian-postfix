@@ -1,0 +1,11 @@
+[Unit]
+Description=Watch for resolv.conf updates and restart postfix
+ConditionPathExists=/etc/resolv.conf
+
+[Path]
+PathChanged=/etc/resolv.conf
+Unit=postfix-resolvconf.service
+
+[Install]
+WantedBy=multi-user.target
+

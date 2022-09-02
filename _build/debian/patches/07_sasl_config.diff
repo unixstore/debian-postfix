@@ -1,0 +1,76 @@
+--- a/src/xsasl/xsasl_cyrus_client.c
++++ b/src/xsasl/xsasl_cyrus_client.c
+@@ -229,6 +229,9 @@
+      */
+     static sasl_callback_t callbacks[] = {
+ 	{SASL_CB_LOG, (XSASL_CYRUS_CB) &xsasl_cyrus_log, 0},
++    #ifdef SASL_CB_GETCONFPATH
++    {SASL_CB_GETCONFPATH, (XSASL_CYRUS_CB) &xsasl_getconfpath, 0},
++    #endif
+ 	{SASL_CB_LIST_END, 0, 0}
+     };
+ 
+--- a/src/xsasl/xsasl_cyrus_common.h
++++ b/src/xsasl/xsasl_cyrus_common.h
+@@ -16,12 +16,17 @@
+   */
+ #if defined(USE_SASL_AUTH) && defined(USE_CYRUS_SASL)
+ 
++#include <sasl.h>
++
+ #define NO_SASL_LANGLIST	((const char *) 0)
+ #define NO_SASL_OUTLANG		((const char **) 0)
+ #define xsasl_cyrus_strerror(status) \
+ 	sasl_errstring((status), NO_SASL_LANGLIST, NO_SASL_OUTLANG)
+ extern int xsasl_cyrus_log(void *, int, const char *);
+ extern int xsasl_cyrus_security_parse_opts(const char *);
++#ifdef SASL_CB_GETCONFPATH
++extern int xsasl_getconfpath(void * context, char ** path);
++#endif
+ 
+ #endif
+ 
+--- a/src/xsasl/xsasl_cyrus_log.c
++++ b/src/xsasl/xsasl_cyrus_log.c
+@@ -28,10 +28,16 @@
+ /* System library. */
+ 
+ #include <sys_defs.h>
++#include <string.h>
+ 
+ /* Utility library. */
+ 
+ #include <msg.h>
++#include <stringops.h>
++
++/* Global library. */
++
++#include <mail_params.h>
+ 
+ /* Application-specific */
+ 
+@@ -101,4 +107,12 @@
+     return (SASL_OK);
+ }
+ 
++#ifdef SASL_CB_GETCONFPATH
++int xsasl_getconfpath(void * context, char ** path)
++{
++    *path = concatenate(var_config_dir, "/", "sasl:/usr/lib/sasl", (char *) 0);
++    return SASL_OK;
++}
++#endif
++
+ #endif
+--- a/src/xsasl/xsasl_cyrus_server.c
++++ b/src/xsasl/xsasl_cyrus_server.c
+@@ -181,6 +181,9 @@
+ 
+ static sasl_callback_t callbacks[] = {
+     {SASL_CB_LOG, (XSASL_CYRUS_CB) &xsasl_cyrus_log, NO_CALLBACK_CONTEXT},
++    #ifdef SASL_CB_GETCONFPATH
++    {SASL_CB_GETCONFPATH, (XSASL_CYRUS_CB) &xsasl_getconfpath, 0},
++    #endif
+     {SASL_CB_LIST_END, 0, 0}
+ };
+ 

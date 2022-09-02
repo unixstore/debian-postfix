@@ -1,0 +1,205 @@
+#!/bin/sh
+
+set -e
+
+# Debian Postfix preinst
+# LaMont Jones <lamont@debian.org>
+# Modified to use debconf by Colin Walters <levanti@verbum.org>
+
+# do we have debconf?
+if [ -f /usr/share/debconf/confmodule ]; then
+    . /usr/share/debconf/confmodule
+    DEBCONF=true
+else
+    DEBCONF=
+fi
+
+MASTER=/etc/postfix/master.cf
+
+compat_conversion_warning() {
+    if [ -n "$DEBCONF" ]; then
+	db_input medium postfix/compat_conversion_warning || true
+	db_go || true
+	db_get postfix/compat_conversion_warning
+	if [ "$RET" = "false" ]; then
+	    echo "aborting postfix install"
+	    exit 1
+	fi
+    else
+    	cat << EOF
+This upgrade of postfix changes some default values in the configuration. As
+part of this upgrade, the following will be changed: (1) chrooted components
+will be changed from '-' to 'y' in master.cf, and (2) myhostname will be set
+to a fully-qualified domain name if it is not already such.  The install will
+be aborted if you do not allow the change.
+EOF
+	echo -n "Shall I make the change? "
+	read line
+	case ${line} in
+	    [nN]*)	echo "aborting postfix install"
+			exit 1;;
+	    *)		;;
+	esac
+    fi
+}
+
+main_cf_conversion_warning() {
+    if [ -n "$DEBCONF" ]; then
+	db_input medium postfix/main_cf_conversion_warning || true
+	db_go || true
+	db_get postfix/main_cf_conversion_warning
+	if [ "$RET" = "false" ]; then
+	    echo "aborting postfix install"
+	    exit 1
+	fi
+    else
+    	cat << EOF
+This upgrade of postfix changes where daemons are located, and your postfix
+configuration explicitly specifies the old location.  The install will be
+aborted if you do not allow the change.
+EOF
+	echo -n "Shall I make the change? "
+	read line
+	case ${line} in
+	    [nN]*)	echo "aborting postfix install"
+			exit 1;;
+	    *)		;;
+	esac
+    fi
+}
+
+dynamicmaps_conversion_warning() {
+    if [ -n "$DEBCONF" ]; then
+	db_input medium postfix/dynamicmaps_conversion_warning || true
+	db_go || true
+	db_get postfix/dynamicmaps_conversion_warning
+	if [ "$RET" != "false" ]; then
+	    touch /var/spool/postfix/dynamicmaps_3.0_transition
+	fi
+    else
+    	cat << EOF
+Postfix version 3.0 changes how dynamic maps are delivered, and your
+dynamicmaps.cf does not reflect that.  Accept this option to convert
+dynamicmaps.cf to the version required for 3.0.
+EOF
+	echo -n "Shall I make the change? "
+	read line
+	case ${line} in
+	    [nN]*)	;;
+	    *)		touch /var/spool/postfix/dynamicmaps_3.0_transition;;
+	esac
+    fi
+}
+
+(umask 022; mkdir -p /var/spool/postfix)
+
+case "$1" in
+    install)
+	rm -f /var/spool/postfix/restart /var/spool/postfix/reload
+	# workaround sendmail not unregistering itself...
+	if [ -e /etc/suid.conf ] && [ -x /usr/sbin/suidunregister ]; then
+	    if grep -q sendmail /etc/suid.conf; then
+		/usr/sbin/suidunregister -s postfix /usr/sbin/sendmail
+	    fi
+	fi
+
+	if [ -L /etc/postfix/postfix-script ]; then
+		rm -f /etc/postfix/postfix-script
+	fi
+
+	;;
+
+    upgrade)
+	version=$2
+	if [ -d /var/spool/postfix ] && [ -f /etc/postfix/main.cf ]; then
+	    touch /var/spool/postfix/restart
+	fi
+	export LANG=C	# for the comparison of mail version...
+
+	if [ -L /etc/postfix/postfix-script ]; then
+		rm -f /etc/postfix/postfix-script
+	fi
+
+	# If user has not modified master/main.proto, move aside so new version
+	# is installed (#991513)
+        cmp -s /usr/share/postfix/main.cf.dist /etc/postfix/main.cf.proto && \
+	    mv /etc/postfix/main.cf.proto /etc/postfix/main.cf.proto.old \
+	    || echo "/etc/postfix/main.cf.proto modified, not updating."
+        cmp -s /usr/share/postfix/master.cf.dist /etc/postfix/master.cf.proto && \
+	    mv /etc/postfix/master.cf.proto /etc/postfix/master.cf.proto.old \
+	    || echo "/etc/postfix/master.cf.proto modified, not updating."
+
+	if grep -q '^tlsmgr[[:space:]]*fifo' $MASTER; then
+	  tlsmgr_warning
+	fi
+
+	if dpkg --compare-versions $version lt 3.1.0-1; then
+	    # check on compatibility warning issues and warn as appropriate.
+	    # even default myhostname needs to be checked to make sure it has a '.'.
+	    for dir in /etc/postfix $(postconf -hxn multi_instance_directories 2>/dev/null || true); do
+		if [ ! -f "${dir}/main.cf" ] || dpkg --compare-versions $version lt 2.11; then
+		    # Just assume that there are issues with the chroot status,
+		    # since postconf -F didn't exist before 2.11
+		    compat_conversion_warning
+		    break
+		fi
+		SRV=$(postconf -c "$dir" -F '*/*/chroot'| sed -n '/ = -$/s/ =.*$//p')
+		if [ -n "$SRV" ] || \
+			postconf -c "$dir" -hx myhostname | grep -qv '\.'; then
+		    compat_conversion_warning
+		    break
+		fi
+	    done
+	fi
+	if [ -f /etc/postfix/main.cf ] && dpkg --compare-versions $version lt 3.0.4-5; then
+	    # if daemon_directory is specifically set, and wrong, then we need
+            # to fix it.
+	    for dir in /etc/postfix $(postconf -hxn multi_instance_directories); do
+		DD=$(postconf -c "$dir" -hxn daemon_directory)
+		if [ "X${DD}" = X/usr/lib/postfix ]; then
+		    main_cf_conversion_warning
+		    break
+		fi
+	    done
+	fi
+
+	if dpkg --compare-versions $version lt 3.0.3-2; then
+	    # If we still think that it's dict_tcp.so, then we need to convert.
+	    DM=/etc/postfix/dynamicmaps.cf
+	    if [ ! -f ${DM} ] || grep -q "/usr/lib/postfix/dict_tcp.so" ${DM}; then
+		dynamicmaps_conversion_warning
+	    fi
+	fi
+
+	if ! grep -q '^retry[[:space:]]' $MASTER; then
+	  retry_warning
+	fi
+	invoke-rc.d --quiet postfix stop || true
+	;;
+
+    abort-upgrade)
+	if [ -f /etc/postfix/main.cf.proto.old ]; then
+	  mv /etc/postfix/main.cf.proto.old /etc/postfix/main.cf.proto
+	  echo "Restoring old /etc/postfix/main.cf.proto on failed upgrade."
+	fi
+	if [ -f /etc/postfix/master.cf.proto.old ]; then
+	  mv /etc/postfix/master.cf.proto.old /etc/postfix/master.cf.proto
+	  echo "Restoring old /etc/postfix/master.cf.proto on failed upgrade."
+	fi
+	;;
+
+    *)
+	echo "preinst called with unknown argument \`$1'" >&2
+	exit 1
+	;;
+esac
+
+if [ install = "$1" ] || [ upgrade = "$1" ]; then
+    # cleanup after past mistakes.
+    rm -f /usr/sbin/postconf.postfix
+    dpkg-divert --package postfix-tls --remove \
+	 --divert /usr/sbin/postconf.postfix \
+		  /usr/sbin/postconf >/dev/null 2>/dev/null
+fi
+
+#DEBHELPER#

@@ -1,0 +1,2 @@
+# Release is signed, so this is fine
+postfix source: debian-watch-uses-insecure-uri ftp://ftp.porcupine.org/mirrors/postfix-release/official/postfix-*

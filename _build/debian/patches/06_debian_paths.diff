@@ -1,0 +1,104 @@
+--- a/conf/main.cf
++++ b/conf/main.cf
+@@ -51,7 +51,7 @@
+ # See the files in examples/chroot-setup for setting up Postfix chroot
+ # environments on different UNIX systems.
+ #
+-queue_directory = /var/spool/postfix
++#queue_directory = /var/spool/postfix
+ 
+ # The command_directory parameter specifies the location of all
+ # postXXX commands.
+@@ -62,7 +62,7 @@
+ # daemon programs (i.e. programs listed in the master.cf file). This
+ # directory must be owned by root.
+ #
+-daemon_directory = /usr/libexec/postfix
++daemon_directory = /usr/lib/sbin
+ 
+ # The data_directory parameter specifies the location of Postfix-writable
+ # data files (caches, random numbers). This directory must be owned
+@@ -468,8 +468,8 @@
+ # IF YOU USE THIS TO DELIVER MAIL SYSTEM-WIDE, YOU MUST SET UP AN
+ # ALIAS THAT FORWARDS MAIL FOR ROOT TO A REAL USER.
+ #
+-#mailbox_command = /some/where/procmail
+-#mailbox_command = /some/where/procmail -a "$EXTENSION"
++#mailbox_command = /usr/bin/procmail
++#mailbox_command = /usr/bin/procmail -a "$EXTENSION"
+ 
+ # The mailbox_transport specifies the optional transport in master.cf
+ # to use after processing aliases and .forward files. This parameter
+--- a/examples/smtpd-policy/greylist.pl
++++ b/examples/smtpd-policy/greylist.pl
+@@ -73,7 +73,7 @@
+ # In case of database corruption, this script saves the database as
+ # $database_name.time(), so that the mail system does not get stuck.
+ #
+-$database_name="/var/mta/greylist.db";
++$database_name="/var/lib/greylist.db";
+ $greylist_delay=60;
+ 
+ #
+--- a/makedefs
++++ b/makedefs
+@@ -566,11 +566,18 @@
+ 			exit 1
+ 		    fi
+ 		    SYSLIBS="-ldb"
++		    SEARCHDIRS=$(${CC-gcc} -print-search-dirs 2>/dev/null |
++			    sed -n '/^libraries: =/s/libraries: =//p' |
++			    sed -e 's/:/\n/g' | xargs -n1 readlink -f |
++			    grep -v 'gcc\|/[0-9.]\+$' | sort -u)
++		    if [ -z "$SEARCHDIRS" ]; then
++			    SEARCHDIRS="/usr/lib64 /lib64 /usr/lib /lib"
++		    fi
+ 		    ;;
+ 		esac
+ 		for name in nsl resolv $GDBM_LIBS
+ 		do
+-		    for lib in /usr/lib64 /lib64 /usr/lib /lib
++		    for lib in $SEARCHDIRS
+ 		    do
+ 			test -e $lib/lib$name.a -o -e $lib/lib$name.so && {
+ 			    SYSLIBS="$SYSLIBS -l$name"
+@@ -645,11 +652,18 @@
+ 			exit 1
+ 		    fi
+ 		    SYSLIBS="-ldb"
++		    SEARCHDIRS=$(${CC-gcc} -print-search-dirs 2>/dev/null |
++			    sed -n '/^libraries: =/s/libraries: =//p' |
++			    sed -e 's/:/\n/g' | xargs -n1 readlink -f |
++			    grep -v 'gcc\|/[0-9.]\+$' | sort -u)
++		    if [ -z "$SEARCHDIRS" ]; then
++			    SEARCHDIRS="/usr/lib64 /lib64 /usr/lib /lib"
++		    fi
+ 		    ;;
+ 		esac
+ 		for name in nsl resolv
+ 		do
+-		    for lib in /usr/lib64 /lib64 /usr/lib /usr/lib/* /lib /lib/*
++		    for lib in $SEARCHDIRS
+ 		    do
+ 			test -e $lib/lib$name.a -o -e $lib/lib$name.so && {
+ 			    SYSLIBS="$SYSLIBS -l$name"
+@@ -683,11 +697,18 @@
+ 			exit 1
+ 		    fi
+ 		    SYSLIBS="-ldb"
++		    SEARCHDIRS=$(${CC-gcc} -print-search-dirs 2>/dev/null |
++			    sed -n '/^libraries: =/s/libraries: =//p' |
++			    sed -e 's/:/\n/g' | xargs -n1 readlink -f |
++			    grep -v 'gcc\|/[0-9.]\+$' | sort -u)
++		    if [ -z "$SEARCHDIRS" ]; then
++			    SEARCHDIRS="/usr/lib64 /lib64 /usr/lib /lib"
++		    fi
+ 		    ;;
+ 		esac
+ 		for name in nsl resolv
+ 		do
+-		    for lib in /usr/lib64 /lib64 /usr/lib /lib
++		    for lib in $SEARCHDIRS
+ 		    do
+ 			test -e $lib/lib$name.a -o -e $lib/lib$name.so && {
+ 			    SYSLIBS="$SYSLIBS -l$name"

@@ -1,0 +1,33 @@
+#!/bin/sh
+
+set -e
+
+# Debian Postfix prerm
+# LaMont Jones <lamont@debian.org>
+
+. /usr/share/postfix/postinst.functions
+
+#DEBHELPER#
+
+case "$1" in
+    upgrade)
+	;;
+
+    deconfigure)
+	;;
+
+    remove)
+	rm -rf /var/spool/postfix/lib
+	rm -rf /var/spool/postfix/etc
+	;;
+
+    failed-upgrade)
+	;;
+
+    *)
+	echo "prerm called with unknown argument \`$1'" >&2
+	exit 1
+	;;
+esac
+
+exit 0

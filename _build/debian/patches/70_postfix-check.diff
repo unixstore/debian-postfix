@@ -1,0 +1,20 @@
+--- a/conf/postfix-script
++++ b/conf/postfix-script
+@@ -315,8 +315,17 @@
+ 	    -exec $WARN not owned by root: {} \;
+ 
+ 	find $todo \( -perm -020 -o -perm -002 \) \
++	# Handle symlinks separately
++	find -L $todo \( -perm -020 -o -perm -002 \) \
+ 	    -exec $WARN group or other writable: {} \;
+ 
++	find $todo -type l | while read f; do \
++	    # makedefs out known to be a symlink and OK
++	    if [ "$f" != "/etc/postfix/./makedefs.out" ]; then \
++	      readlink "$f" | grep -q / && $WARN symlink leaves directory: "$f"; \
++	    fi \
++	done; \
++
+ 	# Check Postfix mail_owner-owned directory tree owner/permissions.
+ 
+ 	find $data_directory/. ! -user $mail_owner \

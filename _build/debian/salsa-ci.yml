@@ -1,0 +1,10 @@
+---
+include:
+  - https://salsa.debian.org/salsa-ci-team/pipeline/raw/master/recipes/debian.yml
+
+variables:
+  # LTO generates unreproducible .gnu_debuglink sections
+  # retest with GCC 12
+  SALSA_CI_DISABLE_REPROTEST: 1
+  # postfix defines LINUX2 or LINUX4 depending on the uname
+  #SALSA_CI_REPROTEST_ARGS: --vary=-kernel
